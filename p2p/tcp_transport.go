@@ -23,7 +23,7 @@ type TCPPeer struct {
 
 	wg *sync.WaitGroup
 
-	publicKey crypto.PublicKey
+	PublicKey crypto.PublicKey
 }
 
 type TCPTransportOpts struct {
@@ -49,6 +49,10 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 
 func (p *TCPPeer) CloseStream() {
 	p.wg.Done()
+}
+
+func (p *TCPPeer) SetPublicKey(b []byte) {
+	p.PublicKey = b
 }
 
 // Addr implements transport interface
@@ -121,6 +125,8 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 	if err = t.HandshakeFunc(peer); err != nil {
 		return
 	}
+
+	fmt.Printf("peer public key : %s\n", peer.PublicKey.String())
 
 	if t.OnPeer != nil {
 		if err = t.OnPeer(peer); err != nil {

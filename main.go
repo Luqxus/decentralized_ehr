@@ -18,7 +18,7 @@ func OnPeer(p p2p.Peer) error {
 func makeServer(listenAddr string, nodes ...string) *FileServer {
 	tcpOpts := p2p.TCPTransportOpts{
 		ListenAddr:    listenAddr,
-		HandshakeFunc: p2p.NOPHandshakeFunc,
+		HandshakeFunc: p2p.DefaultHandshakeFunc,
 		Decoder:       p2p.DefaultDecoder{},
 		OnPeer:        OnPeer,
 	}
