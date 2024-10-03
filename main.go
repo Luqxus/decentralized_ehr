@@ -54,11 +54,13 @@ func main() {
 
 	time.Sleep(2 * time.Second)
 
-	// data := bytes.NewReader([]byte("oisajdop"))
+	// // for i := 0; i < 5; i++ {
+	// data := bytes.NewReader([]byte("over the wire from :300000000"))
+	// server1.Store("privatekey", data)
+	// time.Sleep(5 * time.Millisecond)
+	// }
 
-	// server2.StoreData("private key", data)
-
-	r, err := server2.Get("privatekey")
+	_, r, err := server2.Get("privatekey")
 	if err != nil {
 		log.Fatal(err)
 	}

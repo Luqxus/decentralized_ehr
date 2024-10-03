@@ -117,30 +117,34 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(s.Root + "/" + pathKey.Root)
 }
 
-func (s *Store) Read(key string) (io.Reader, error) {
-	f, err := s.readStream(key)
+func (s *Store) Read(key string) (int64, io.Reader, error) {
+	n, f, err := s.readStream(key)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	defer f.Close()
 
 	buf := new(bytes.Buffer)
 
-	io.Copy(buf, f)
+	_, err = io.Copy(buf, f)
 
-	return buf, nil
+	return n, buf, err
 }
 
 func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
-func (s *Store) readStream(key string) (io.ReadCloser, error) {
+func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	pathKey := s.PathTransformFunc(key)
 
-	return os.Open(s.Root + "/" + pathKey.FullPath())
-
+	stat, err := os.Stat(s.Root + "/" + pathKey.FullPath())
+	if err != nil {
+		return 0, nil, err
+	}
+	r, err := os.Open(s.Root + "/" + pathKey.FullPath())
+	return stat.Size(), r, err
 }
 
 func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
