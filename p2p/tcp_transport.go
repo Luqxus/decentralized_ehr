@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"sync"
+
+	"github.com/luqxus/dstore/crypto"
 )
 
 // TCPPeer represents the remote node over TCP established connection
@@ -20,6 +22,8 @@ type TCPPeer struct {
 	outbound bool
 
 	wg *sync.WaitGroup
+
+	publicKey crypto.PublicKey
 }
 
 type TCPTransportOpts struct {

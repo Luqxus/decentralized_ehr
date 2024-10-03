@@ -18,6 +18,7 @@ func TestPathTransformFunc(t *testing.T) {
 func TestStore(t *testing.T) {
 	opts := StoreOpts{
 		PathTransformFunc: CASPathTransformFunc,
+		Root:              "spxce",
 	}
 
 	s := NewStore(opts)
