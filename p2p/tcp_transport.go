@@ -1,13 +1,19 @@
 package p2p
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"sync"
 
-	"github.com/luqxus/dstore/crypto"
+	"github.com/luqxus/dstore/contract"
+
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 )
 
 // TCPPeer represents the remote node over TCP established connection
@@ -23,7 +29,7 @@ type TCPPeer struct {
 
 	wg *sync.WaitGroup
 
-	PublicKey crypto.PublicKey
+	PublicKey ecdsa.PublicKey
 }
 
 type TCPTransportOpts struct {
@@ -31,6 +37,7 @@ type TCPTransportOpts struct {
 	HandshakeFunc HandshakeFunc
 	Decoder       Decoder
 	OnPeer        func(Peer) error
+	Contract      contract.Contract
 }
 
 type TCPTransport struct {
@@ -51,8 +58,8 @@ func (p *TCPPeer) CloseStream() {
 	p.wg.Done()
 }
 
-func (p *TCPPeer) SetPublicKey(b []byte) {
-	p.PublicKey = b
+func (p *TCPPeer) SetPublicKey(key ecdsa.PublicKey) {
+	p.PublicKey = key
 }
 
 // Addr implements transport interface
@@ -79,6 +86,19 @@ func (t *TCPTransport) Consume() <-chan RPC {
 }
 
 func (t *TCPTransport) ListenAndAccept() error {
+
+	// FIXME: @luqxus adding node to smart contract here for testing purposes
+	// exists, err := t.Contract.IsAdded(t.ListenAddr)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if !exists {
+	// 	if err := t.Contract.AddNode(t.ListenAddr); err != nil {
+	// 		return err
+	// 	}
+	// }
+
 	var err error
 
 	t.listener, err = net.Listen("tcp", t.ListenAddr)
@@ -122,11 +142,12 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 
 	peer := NewTCPPeer(conn, outbound)
 
-	if err = t.HandshakeFunc(peer); err != nil {
+	fmt.Printf("New Connected Peer : %+v\n", peer)
+	if err = t.DefaultHandshakeFunc(peer); err != nil {
 		return
 	}
 
-	fmt.Printf("peer public key : %s\n", peer.PublicKey.String())
+	fmt.Printf("peer public key : %+v\n", peer.PublicKey)
 
 	if t.OnPeer != nil {
 		if err = t.OnPeer(peer); err != nil {
@@ -173,4 +194,99 @@ func (t *TCPTransport) Dial(addr string) error {
 	go t.handleConn(conn, true)
 
 	return nil
+}
+
+func (t *TCPTransport) DefaultHandshakeFunc(peer Peer) error {
+	fn := func(peer Peer) error {
+		// FIXME: @luqxus do not generate private key here
+
+		myKey, err := t.Contract.GetPublicKey()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Our Public Key : %+v\n", myKey)
+
+		buf := new(bytes.Buffer)
+		err = gob.NewEncoder(buf).Encode(myKey)
+		if err != nil {
+			return err
+		}
+
+		if err := peer.Send(buf.Bytes()); err != nil {
+			return err
+		}
+
+		// timeout := 40 * time.Second
+		// done := make(chan bool, 1)
+		// var keyCh chan ecdsa.PublicKey
+		// go func() {
+
+		b, err := receivePeerPublicKey(peer)
+		if err != nil {
+			// done <- false
+			log.Printf("handshake error : %s\n", err.Error())
+			return err
+		}
+
+		var pubKey ecdsa.PublicKey
+		err = gob.NewDecoder(bytes.NewBuffer(b)).Decode(&pubKey)
+		if err != nil {
+			// done <- false
+			log.Printf("handshake error : %s", err.Error())
+			return err
+		}
+
+		fmt.Printf("Received Public Key : %+v\n", pubKey)
+
+		// keyCh <- pubKey
+
+		ok, err := t.Contract.VerifyNode(crypto.PubkeyToAddress(pubKey), peer.RemoteAddr().String())
+		if err != nil {
+			// done <- false
+			log.Printf("handshake error :  invalid public key")
+			return err
+		}
+
+		if !ok {
+			return fmt.Errorf("handshake error : failed to verify peer's public key")
+		}
+
+		// done <- ok
+
+		// }()
+
+		// select {
+		// case success := <-done:
+		// 	if !success {
+		// 		<-keyCh
+		// 		return fmt.Errorf("handshake error : failed to verify peer's public key")
+		// 	}
+		peer.SetPublicKey(pubKey)
+		// 	return nil
+
+		// case <-time.After(timeout):
+		// 	return fmt.Errorf("handshake error: timeout")
+		// }
+
+		return nil
+
+	}
+
+	return t.HandshakeFunc(peer, fn)
+}
+
+func receivePeerPublicKey(peer Peer) ([]byte, error) {
+	b := make([]byte, 256)
+	_, err := peer.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, err
+}
+
+func init() {
+	gob.Register(ecdsa.PublicKey{})
+	gob.Register(secp256k1.BitCurve{})
 }

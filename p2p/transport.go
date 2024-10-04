@@ -1,12 +1,15 @@
 package p2p
 
-import "net"
+import (
+	"crypto/ecdsa"
+	"net"
+)
 
 // Peer interface represents the remote node.
 type Peer interface {
 	net.Conn
 	Send([]byte) error
-	SetPublicKey(b []byte)
+	SetPublicKey(ecdsa.PublicKey)
 	CloseStream()
 }
 

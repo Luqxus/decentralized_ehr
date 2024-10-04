@@ -275,6 +275,7 @@ func (s *FileServer) Start() error {
 	if len(s.BootstrapNodes) != 0 {
 
 		// if not zero |  bootstrap nodes
+		time.Sleep(1 * time.Second)
 		s.bootstrapNetwork()
 	}
 
