@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"sync"
 
@@ -205,10 +206,10 @@ func (t *TCPTransport) DefaultHandshakeFunc(peer Peer) error {
 			return err
 		}
 
-		fmt.Printf("Our Public Key : %+v\n", myKey)
+		fmt.Printf("Our Public Key : %+v\n", toSerializablePubKey(myKey))
 
 		buf := new(bytes.Buffer)
-		err = gob.NewEncoder(buf).Encode(myKey)
+		err = gob.NewEncoder(buf).Encode(&myKey)
 		if err != nil {
 			return err
 		}
@@ -229,27 +230,38 @@ func (t *TCPTransport) DefaultHandshakeFunc(peer Peer) error {
 			return err
 		}
 
-		var pubKey ecdsa.PublicKey
-		err = gob.NewDecoder(bytes.NewBuffer(b)).Decode(&pubKey)
+		var serializablePubKey SerializablePubKey
+
+		err = gob.NewDecoder(bytes.NewBuffer(b)).Decode(&serializablePubKey)
 		if err != nil {
 			// done <- false
-			log.Printf("handshake error : %s", err.Error())
+			log.Printf("handshake error. error decoding: %s", err.Error())
+			return err
+		}
+
+		fmt.Printf("skdjklasjdlkjaskldklas %+v\n", serializablePubKey)
+
+		pubKey, err := fromSerializablePubKey(serializablePubKey)
+		if err != nil {
+			log.Printf("handshake error. error decoding: %s", err.Error())
 			return err
 		}
 
 		fmt.Printf("Received Public Key : %+v\n", pubKey)
 
 		// keyCh <- pubKey
-
-		ok, err := t.Contract.VerifyNode(crypto.PubkeyToAddress(pubKey), peer.RemoteAddr().String())
+		fmt.Printf("Address Verified : %s\n", peer.LocalAddr().Network())
+		ok, err := t.Contract.VerifyNode(crypto.PubkeyToAddress(*pubKey), peer.LocalAddr().Network())
 		if err != nil {
 			// done <- false
 			log.Printf("handshake error :  invalid public key")
 			return err
 		}
 
+		fmt.Printf("Decoded Address : %s\n", crypto.PubkeyToAddress(*pubKey).Hex())
+
 		if !ok {
-			return fmt.Errorf("handshake error : failed to verify peer's public key")
+			return fmt.Errorf("handshake error : node not validated")
 		}
 
 		// done <- ok
@@ -262,7 +274,7 @@ func (t *TCPTransport) DefaultHandshakeFunc(peer Peer) error {
 		// 		<-keyCh
 		// 		return fmt.Errorf("handshake error : failed to verify peer's public key")
 		// 	}
-		peer.SetPublicKey(pubKey)
+		peer.SetPublicKey(*pubKey)
 		// 	return nil
 
 		// case <-time.After(timeout):
@@ -277,16 +289,48 @@ func (t *TCPTransport) DefaultHandshakeFunc(peer Peer) error {
 }
 
 func receivePeerPublicKey(peer Peer) ([]byte, error) {
-	b := make([]byte, 256)
-	_, err := peer.Read(b)
+	b := make([]byte, 512)
+	n, err := peer.Read(b)
 	if err != nil {
 		return nil, err
 	}
 
-	return b, err
+	fmt.Printf("number kdsjfkdsfkldslfksdf : %d\n", n)
+
+	return b[:n], err
 }
 
 func init() {
 	gob.Register(ecdsa.PublicKey{})
 	gob.Register(secp256k1.BitCurve{})
+}
+
+type SerializablePubKey struct {
+	CurveName string // Name of the curve
+	X, Y      *big.Int
+}
+
+// toSerializablePubKey converts ecdsa.PublicKey to SerializablePubKey
+func toSerializablePubKey(pubKey *ecdsa.PublicKey) SerializablePubKey {
+	return SerializablePubKey{
+		CurveName: "secp256k1", // Use the name for the specific curve
+		X:         pubKey.X,
+		Y:         pubKey.Y,
+	}
+}
+
+// fromSerializablePubKey converts SerializablePubKey back to ecdsa.PublicKey
+func fromSerializablePubKey(s SerializablePubKey) (*ecdsa.PublicKey, error) {
+	// var curve elliptic.Curve
+	// if s.CurveName == "secp256k1" {
+	// 	curve = secp256k1.S256() // Assign the secp256k1 curve
+	// } else {
+	// 	return nil, log.Output(0, "Unsupported curve")
+	// }
+
+	return &ecdsa.PublicKey{
+		Curve: secp256k1.S256(),
+		X:     s.X,
+		Y:     s.Y,
+	}, nil
 }
