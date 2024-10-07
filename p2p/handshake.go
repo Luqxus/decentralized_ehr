@@ -8,7 +8,6 @@ func NOPHandshakeFunc(peer Peer, fn func(Peer) error) error {
 
 func DefaultHandshakeFunc(peer Peer, verifyFunc func(Peer) error) error {
 	return verifyFunc(peer)
-
 }
 
 // func verify() bool {

@@ -144,7 +144,7 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 	peer := NewTCPPeer(conn, outbound)
 
 	fmt.Printf("New Connected Peer : %+v\n", peer)
-	if err = t.DefaultHandshakeFunc(peer); err != nil {
+	if err = t.HandshakeFunc(peer, t.DefaultHandshakeFunc); err != nil {
 		return
 	}
 
@@ -198,94 +198,90 @@ func (t *TCPTransport) Dial(addr string) error {
 }
 
 func (t *TCPTransport) DefaultHandshakeFunc(peer Peer) error {
-	fn := func(peer Peer) error {
-		// FIXME: @luqxus do not generate private key here
+	// FIXME: @luqxus do not generate private key here
 
-		myKey, err := t.Contract.GetPublicKey()
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Our Public Key : %+v\n", toSerializablePubKey(myKey))
-
-		buf := new(bytes.Buffer)
-		err = gob.NewEncoder(buf).Encode(&myKey)
-		if err != nil {
-			return err
-		}
-
-		if err := peer.Send(buf.Bytes()); err != nil {
-			return err
-		}
-
-		// timeout := 40 * time.Second
-		// done := make(chan bool, 1)
-		// var keyCh chan ecdsa.PublicKey
-		// go func() {
-
-		b, err := receivePeerPublicKey(peer)
-		if err != nil {
-			// done <- false
-			log.Printf("handshake error : %s\n", err.Error())
-			return err
-		}
-
-		var serializablePubKey SerializablePubKey
-
-		err = gob.NewDecoder(bytes.NewBuffer(b)).Decode(&serializablePubKey)
-		if err != nil {
-			// done <- false
-			log.Printf("handshake error. error decoding: %s", err.Error())
-			return err
-		}
-
-		fmt.Printf("skdjklasjdlkjaskldklas %+v\n", serializablePubKey)
-
-		pubKey, err := fromSerializablePubKey(serializablePubKey)
-		if err != nil {
-			log.Printf("handshake error. error decoding: %s", err.Error())
-			return err
-		}
-
-		fmt.Printf("Received Public Key : %+v\n", pubKey)
-
-		// keyCh <- pubKey
-		fmt.Printf("Address Verified : %s\n", peer.LocalAddr().Network())
-		ok, err := t.Contract.VerifyNode(crypto.PubkeyToAddress(*pubKey), peer.LocalAddr().Network())
-		if err != nil {
-			// done <- false
-			log.Printf("handshake error :  invalid public key")
-			return err
-		}
-
-		fmt.Printf("Decoded Address : %s\n", crypto.PubkeyToAddress(*pubKey).Hex())
-
-		if !ok {
-			return fmt.Errorf("handshake error : node not validated")
-		}
-
-		// done <- ok
-
-		// }()
-
-		// select {
-		// case success := <-done:
-		// 	if !success {
-		// 		<-keyCh
-		// 		return fmt.Errorf("handshake error : failed to verify peer's public key")
-		// 	}
-		peer.SetPublicKey(*pubKey)
-		// 	return nil
-
-		// case <-time.After(timeout):
-		// 	return fmt.Errorf("handshake error: timeout")
-		// }
-
-		return nil
-
+	myKey, err := t.Contract.GetPublicKey()
+	if err != nil {
+		return err
 	}
 
-	return t.HandshakeFunc(peer, fn)
+	fmt.Printf("Our Public Key : %+v\n", toSerializablePubKey(myKey))
+
+	buf := new(bytes.Buffer)
+	err = gob.NewEncoder(buf).Encode(&myKey)
+	if err != nil {
+		return err
+	}
+
+	if err := peer.Send(buf.Bytes()); err != nil {
+		return err
+	}
+
+	// timeout := 40 * time.Second
+	// done := make(chan bool, 1)
+	// var keyCh chan ecdsa.PublicKey
+	// go func() {
+
+	b, err := receivePeerPublicKey(peer)
+	if err != nil {
+		// done <- false
+		log.Printf("handshake error : %s\n", err.Error())
+		return err
+	}
+
+	var serializablePubKey SerializablePubKey
+
+	err = gob.NewDecoder(bytes.NewBuffer(b)).Decode(&serializablePubKey)
+	if err != nil {
+		// done <- false
+		log.Printf("handshake error. error decoding: %s", err.Error())
+		return err
+	}
+
+	fmt.Printf("skdjklasjdlkjaskldklas %+v\n", serializablePubKey)
+
+	pubKey, err := fromSerializablePubKey(serializablePubKey)
+	if err != nil {
+		log.Printf("handshake error. error decoding: %s", err.Error())
+		return err
+	}
+
+	fmt.Printf("Received Public Key : %+v\n", pubKey)
+
+	// keyCh <- pubKey
+	fmt.Printf("Address Verified : %s\n", peer.LocalAddr().Network())
+	ok, err := t.Contract.VerifyNode(crypto.PubkeyToAddress(*pubKey), peer.LocalAddr().Network())
+	if err != nil {
+		// done <- false
+		log.Printf("handshake error :  invalid public key")
+		return err
+	}
+
+	fmt.Printf("Decoded Address : %s\n", crypto.PubkeyToAddress(*pubKey).Hex())
+
+	if !ok {
+		return fmt.Errorf("handshake error : node not validated")
+	}
+
+	// done <- ok
+
+	// }()
+
+	// select {
+	// case success := <-done:
+	// 	if !success {
+	// 		<-keyCh
+	// 		return fmt.Errorf("handshake error : failed to verify peer's public key")
+	// 	}
+	peer.SetPublicKey(*pubKey)
+	// 	return nil
+
+	// case <-time.After(timeout):
+	// 	return fmt.Errorf("handshake error: timeout")
+	// }
+
+	return nil
+
 }
 
 func receivePeerPublicKey(peer Peer) ([]byte, error) {

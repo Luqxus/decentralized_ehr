@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"log"
 	"math/big"
 	"os"
@@ -62,7 +60,7 @@ func makeServer(listenAddr string, walletPath string, tmp string, nodes ...strin
 
 	tcpOpts := p2p.TCPTransportOpts{
 		ListenAddr:    listenAddr,
-		HandshakeFunc: p2p.DefaultHandshakeFunc,
+		HandshakeFunc: p2p.NOPHandshakeFunc,
 		Decoder:       p2p.DefaultDecoder{},
 		OnPeer:        OnPeer,
 		Contract:      contract,
@@ -97,6 +95,7 @@ func main() {
 		"./tmp1",
 		"",
 	)
+
 	server2 := makeServer(
 		":4000",
 		"./wallet2/UTC--2024-10-04T18-38-28.600393821Z--c4b7384139c3bf033da5e15566803ad894f4c3c7",
@@ -109,6 +108,11 @@ func main() {
 		log.Fatal(server1.Start())
 	}()
 
+	api := NewAPIServer(APIServerOpts{
+		localNode:  server1,
+		ListenAddr: "localhost:5050",
+	})
+
 	time.Sleep(2 * time.Second)
 
 	go func() {
@@ -116,19 +120,23 @@ func main() {
 		log.Fatal(server2.Start())
 	}()
 
-	time.Sleep(10 * time.Second)
-
-	_, r, err := server2.Get("privatekey")
-	if err != nil {
+	if err := api.Run(); err != nil {
 		log.Fatal(err)
 	}
 
-	b, err := io.ReadAll(r)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// time.Sleep(10 * time.Second)
 
-	fmt.Print(string(b))
-	select {}
+	// _, r, err := server2.Get("privatekey")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// b, err := io.ReadAll(r)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// fmt.Print(string(b))
+	// select {}
 
 }
