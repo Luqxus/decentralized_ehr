@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -34,8 +36,10 @@ func NewAPIServer(opts APIServerOpts) *APIServer {
 func (s *APIServer) Run() error {
 
 	// TODO: upload files
-	s.mux.HandleFunc("POST /upload", s.handler(s.write))
+	s.mux.HandleFunc("POST /write", s.handler(s.write))
+
 	// TODO: retrieve files
+	s.mux.HandleFunc("GET /read", s.handler(s.read))
 
 	// start and listen api server
 	return http.ListenAndServe(s.ListenAddr, s.mux)
@@ -58,7 +62,37 @@ func (s *APIServer) handler(fn APIFunc) http.HandlerFunc {
 
 func (s *APIServer) write(w http.ResponseWriter, r *http.Request) error {
 
-	s.localNode.Store("12345", r.Body)
+	err := s.localNode.Store("12345", r.Body)
+	if err != nil {
+		http.Error(w, "failed to write data", http.StatusInternalServerError)
+		return nil
+	}
 
-	return nil
+	return writeJSON(w, map[string]string{"message": "data written successfully"})
+}
+
+func (s *APIServer) read(w http.ResponseWriter, r *http.Request) error {
+	key, ok := r.URL.Query()["key"]
+	if !ok {
+		http.Error(w, "key not found", http.StatusBadRequest)
+		return nil
+	}
+
+	n, reader, err := s.localNode.Get(key[0])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+	b := make([]byte, n)
+	_, err = reader.Read(b)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+	_, err = w.Write(b)
+	return err
+}
+
+func writeJSON(w io.Writer, v any) error {
+	return json.NewEncoder(w).Encode(v)
 }
